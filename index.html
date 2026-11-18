@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Мемный радар</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0909; --panel: #151111; --line: #2a2121; --text: #ece6e6; --muted: #9b8f8f;
+    --red: #e0453a; --gold: #d7a85a; --ai: #8f7bff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 Inter, system-ui, sans-serif; }
+  a { color: var(--red); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1600px; margin: 0 auto; padding: 32px 40px 80px; }
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 20px; }
+  h1 { font: 600 44px/1 "Cormorant Garamond", serif; margin: 0; letter-spacing: .01em; }
+  h1 small { display: block; font: 300 13px Inter, sans-serif; color: var(--muted); letter-spacing: .3em; text-transform: uppercase; margin-top: 10px; }
+  select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font: inherit; }
+  .idea { margin: 28px 0 8px; padding: 22px 26px; border: 1px solid #4a2420; border-radius: 14px; background: linear-gradient(120deg, #2a1210, #151111 60%); }
+  .idea .k { font-size: 12px; letter-spacing: .3em; text-transform: uppercase; color: var(--red); }
+  .idea .t { font: 600 28px/1.15 "Cormorant Garamond", serif; margin: 6px 0 6px; }
+  .idea .w { color: #cfc4c4; max-width: 900px; }
+  nav { display: flex; gap: 8px; margin: 28px 0 18px; position: sticky; top: 0; background: var(--bg); padding: 10px 0; z-index: 5; }
+  nav button { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 7px 16px; font: 500 14px Inter, sans-serif; cursor: pointer; }
+  nav button.on { color: var(--text); border-color: var(--red); background: #221413; }
+  nav button.ai.on { border-color: var(--ai); background: #1a1630; }
+  .lead { color: var(--muted); margin: 0 0 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 22px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .card h3 { margin: 0; font-size: 18px; font-weight: 500; }
+  .num { color: var(--muted); margin-right: 6px; }
+  .fresh { font-size: 13px; color: var(--gold); }
+  .card.ai .fresh { color: #b3a6ff; }
+  .card p { margin: 0; color: #d4cccc; font-size: 14px; }
+  .card b { color: var(--text); font-weight: 500; }
+  .players { display: flex; gap: 10px; overflow-x: auto; padding: 6px 0 2px; }
+  .players iframe { flex: none; width: 325px; height: 578px; border: 0; border-radius: 10px; background: #000; }
+  .players iframe.ig { width: 326px; height: 580px; background: #fff; }
+  .links { font-size: 13px; color: var(--muted); }
+  .links a { margin-right: 4px; }
+  .foot { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+  .foot p { margin: 0 0 8px; }
+  .err { color: var(--red); margin-top: 40px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Мемный радар<small id="sub">загрузка…</small></h1>
+    <label>Выпуск: <select id="pick"></select></label>
+  </header>
+
+  <section class="idea" id="idea"></section>
+
+  <nav>
+    <button data-tab="memes" class="on">Общие мемы</button>
+    <button data-tab="ai" class="ai">ИИ-блок</button>
+  </nav>
+
+  <section id="tab-memes"><div class="grid" id="memes"></div></section>
+  <section id="tab-ai" hidden><p class="lead" id="aisum"></p><div class="grid" id="ai"></div></section>
+
+  <section class="foot" id="foot"></section>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// Turn a link into an embedded player when the platform allows it.
+function player(url) {
+  let m = url.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/);
+  if (m) return `<iframe loading="lazy" allow="fullscreen; encrypted-media" src="https://www.tiktok.com/player/v1/${m[1]}?description=1&music_info=1&autoplay=0"></iframe>`;
+  m = url.match(/instagram\.com\/(?:reel|p)\/([\w-]+)/);
+  if (m) return `<iframe class="ig" loading="lazy" src="https://www.instagram.com/reel/${m[1]}/embed"></iframe>`;
+  m = url.match(/youtube\.com\/shorts\/([\w-]+)/);
+  if (m) return `<iframe loading="lazy" allow="fullscreen; encrypted-media" src="https://www.youtube-nocookie.com/embed/${m[1]}"></iframe>`;
+  return "";
+}
+
+function card(t, i, isAi) {
+  const players = (t.links || []).map((l) => player(l.url)).join("");
+  const links = (t.links || []).map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join(" · ");
+  return `<article class="card${isAi ? " ai" : ""}">
+    <h3><span class="num">${isAi ? "ИИ-" : ""}${i + 1}.</span>${esc(t.title)}</h3>
+    <div class="fresh">${esc(t.fresh)}</div>
+    <p><b>Что это:</b> ${esc(t.what)}</p>
+    <p><b>Твоя версия:</b> ${esc(t.yours)}</p>
+    ${players ? `<div class="players">${players}</div>` : ""}
+    <div class="links">Смотреть: ${links}${t.sound ? ` · звук: ${esc(t.sound)}` : ""}</div>
+  </article>`;
+}
+
+async function load(date) {
+  const d = await (await fetch(`data/${date}.json`, { cache: "no-store" })).json();
+  $("sub").textContent = `выпуск · ${d.dateLabel}`;
+  $("idea").innerHTML = `<div class="k">Идея дня</div><div class="t">${esc(d.idea.title)}</div><div class="w">${esc(d.idea.why)}</div>`;
+  $("memes").innerHTML = (d.memes || []).map((t, i) => card(t, i, false)).join("");
+  $("aisum").textContent = d.ai?.summary || "";
+  $("ai").innerHTML = (d.ai?.items || []).map((t, i) => card(t, i, true)).join("");
+  $("foot").innerHTML = `<p><b>Затухают, не брать:</b> ${esc(d.fading)}</p>
+    <p>Sources: ${(d.sources || []).map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label)}</a>`).join(", ")}</p>`;
+}
+
+document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("on", x === b));
+  $("tab-memes").hidden = b.dataset.tab !== "memes";
+  $("tab-ai").hidden = b.dataset.tab !== "ai";
+}));
+
+(async () => {
+  try {
+    const idx = await (await fetch("data/index.json", { cache: "no-store" })).json();
+    $("pick").innerHTML = idx.issues.map((x) => `<option value="${x.date}">${esc(x.label)}</option>`).join("");
+    $("pick").value = idx.latest;
+    $("pick").addEventListener("change", (e) => load(e.target.value));
+    await load(idx.latest);
+  } catch (e) {
+    document.querySelector(".wrap").insertAdjacentHTML("beforeend", `<p class="err">Не удалось загрузить данные: ${esc(e.message)}</p>`);
+  }
+})();
+</script>
+</body>
+</html>
